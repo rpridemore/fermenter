@@ -1,0 +1,18 @@
+@*
+ * This template takes a single argument, a String containing a
+ * message to display.
+ *@
+@(temp: Float)
+
+@*
+ * Call the `main` template with two arguments. The first
+ * argument is a `String` with the title of the page, the second
+ * argument is an `Html` object containing the body of the page.  @{"%3.1f".format(temp)}&#176;F
+ *@
+@main("Fermentation Monitor") {
+
+	<div ng-controller="MonitorController as monitor">
+		Current ambient temperature is <span ng-bind="ambient"></span>
+	</div>
+
+}
