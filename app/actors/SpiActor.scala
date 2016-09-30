@@ -1,77 +1,54 @@
 package actors
 
-import scala.concurrent.{ Await, Future }
-import akka.actor._
+import java.io.IOException
+import java.nio.charset.Charset
+import java.nio.file.FileSystems
+import java.nio.file.Files
+import javax.inject.Inject
+
+import scala.concurrent.Future
+import scala.util.Failure
+import scala.util.Success
+
+import akka.actor.Actor
+import akka.actor.Props
+import akka.actor.actorRef2Scala
 import play.api.Configuration
 import play.api.Logger
-import com.pi4j.io.spi._
-import com.pi4j.system.SystemInfo
-import java.io._
-import java.nio.file._
-import javax.inject.Inject
-import java.nio.charset.Charset
-import scala.util.Success
-import scala.util.Failure
 
-object TemperatureActor {
-  def props = Props[TemperatureActor]
+object SpiActor {
+  def props = Props[SpiActor]
 
-  case object ReadTemperatures
-  case class Temperatures(cpu: Option[Double], ambient: Option[Double], chamber: Option[Double])
+  case object ReadChamberTemp
+  case class ChamberTemp(chamber: Option[Double] = None)
 }
 
-class TemperatureActor @Inject() (configuration: Configuration) extends Actor {
+/**
+ * SpiActor is responsible for interacting with the SPI (onewire) bus
+ * for reading temperature values from the DS18B20 waterproof probe.
+ */
+class SpiActor @Inject() (configuration: Configuration) extends Actor {
+  import SpiActor._
   import context.dispatcher
-  import TemperatureActor._
 
-  val channel = configuration.getInt("mcp3008.channel.tmp36").getOrElse {
-    Logger.warn("Using default channel 0 for TMP36")
-    0
-  }
   val w1_device = setupOnewire
-  val spi = new SpiWrapper
 
   def receive = {
-    case ReadTemperatures => {
+    case ReadChamberTemp => {
       val sndr = sender()
-      val fermenter = Future { readChamberTemp }
-      val cpu = Future { readCpuTemp }
-      val ambient = Future { readTmp36 }
+      val response = Future { readChamberTemp } map ( ChamberTemp(_) )
 
-      val resp = for {
-        f <- fermenter
-        c <- cpu
-        a <- ambient
-      } yield Temperatures(c, a, f)
-
-      resp onComplete {
+      response onComplete {
         case Success(t) => {
           Logger.trace("Success!")
           sndr ! t
         }
         case Failure(e) => {
           Logger.trace("Failure!")
-          sndr ! Temperatures(None, None, None)
+          sndr ! ChamberTemp
         }
       }
     }
-  }
-
-  private def readCpuTemp = {
-    Logger.trace("reading CPU temp")
-    val tmp = SystemInfo.getCpuTemperature.asInstanceOf[Double]
-    Logger.info(s"CPU temp is $tmp")
-    Some(tmp)
-  }
-
-  private def readTmp36 = {
-    Logger.trace("reading TMP36 via SPI")
-    val level = spi.readChannel(channel)
-    Logger.debug(s"TMP36 level is $level")
-    // convert level to temp in Celcius
-    val tmp = ((level * 330.0) / 1023.0) - 50.0
-    Logger.info(s"Ambient temp is $tmp")
-    Some(tmp)
   }
 
   private def readChamberTemp: Option[Double] = {
@@ -122,3 +99,4 @@ class TemperatureActor @Inject() (configuration: Configuration) extends Actor {
     }
   }
 }
+
