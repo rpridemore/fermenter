@@ -25,8 +25,7 @@ class Module extends AbstractModule with AkkaGuiceSupport {
     bind(classOf[ApplicationTimer]).asEagerSingleton()
     // Set AtomicCounter as the implementation for Counter.
     bind(classOf[Counter]).to(classOf[AtomicCounter])
-    bindActor[SpiActor]("spi-actor")
-    bindActor[AnalogActor]("analog-actor")
+    bindActor[TemperatureActor]("temp-actor")
   }
 
 }

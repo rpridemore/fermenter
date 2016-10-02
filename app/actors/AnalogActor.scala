@@ -1,7 +1,5 @@
 package actors
 
-import javax.inject.Inject
-
 import scala.concurrent.Future
 import scala.util.Failure
 import scala.util.Success
@@ -11,11 +9,10 @@ import com.pi4j.system.SystemInfo
 import akka.actor.Actor
 import akka.actor.Props
 import akka.actor.actorRef2Scala
-import play.api.Configuration
-import play.api.Logger
+import akka.event.Logging
 
 object AnalogActor {
-  def props = Props[AnalogActor]
+  def props(channel: Option[Int]) = Props(new AnalogActor(channel))
 
   case object ReadAmbientTemp
   case class AmbientTemp(ambient: Option[Double], cpu: Option[Double])
@@ -25,12 +22,13 @@ object AnalogActor {
  * AnalogActor is responsible for data available via the MCP3008 A/D chip
  * for sensors such as the TMP36 temperature sensor.
  */
-class AnalogActor @Inject() (configuration: Configuration) extends Actor {
+class AnalogActor(cfgChannel: Option[Int]) extends Actor {
   import AnalogActor._
   import context.dispatcher
 
-  val channel = configuration.getInt("mcp3008.channel.tmp36").getOrElse {
-    Logger.warn("Using default channel 0 for TMP36")
+  val log = Logging(context.system, this)
+  val channel = cfgChannel.getOrElse {
+    log.warning("Using default channel 0 for TMP36")
     0
   }
   
@@ -49,11 +47,11 @@ class AnalogActor @Inject() (configuration: Configuration) extends Actor {
 
       resp onComplete {
         case Success(t) => {
-          Logger.trace("Success!")
+          log.debug("Success!")
           sndr ! t
         }
         case Failure(e) => {
-          Logger.trace("Failure!")
+          log.debug("Failure!")
           sndr ! AmbientTemp(None, None)
         }
       }
@@ -61,19 +59,19 @@ class AnalogActor @Inject() (configuration: Configuration) extends Actor {
   }
 
   private def readCpuTemp = {
-    Logger.trace("reading CPU temp")
+    log.debug("reading CPU temp")
     val tmp = SystemInfo.getCpuTemperature.asInstanceOf[Double]
-    Logger.info(s"CPU temp is $tmp")
+    log.info(s"CPU temp is $tmp")
     Some(tmp)
   }
 
   private def readTmp36 = {
-    Logger.trace("reading TMP36 via SPI")
+    log.debug("reading TMP36 via SPI")
     val level = spi.readChannel(channel)
-    Logger.debug(s"TMP36 level is $level")
+    log.debug(s"TMP36 level is $level")
     // convert level to temp in Celcius
     val tmp = ((level * 330.0) / 1023.0) - 50.0
-    Logger.info(s"Ambient temp is $tmp")
+    log.info(s"Ambient temp is $tmp")
     Some(tmp)
   }
 }
